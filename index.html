@@ -120,6 +120,26 @@
       margin-bottom: 6px;
     }
 
+    /* 라벨 옆 빨간 별표 (필수 입력 표시) */
+    .필수표시 { color: #dc2626; }
+
+    /* 오류 안내 문구 - 평소에는 숨겨져 있다가 오류가 있을 때만 보입니다 */
+    .오류문구 {
+      display: none;
+      margin: 6px 0 0;
+      font-size: 12.5px;
+      color: #dc2626;
+    }
+
+    /* 오류가 있는 입력줄: 테두리를 빨갛게, 안내 문구를 보이게 */
+    .입력줄.입력오류 input,
+    .입력줄.입력오류 textarea {
+      border-color: #dc2626;
+    }
+    .입력줄.입력오류 .오류문구 {
+      display: block;
+    }
+
     /* 글자입력 / 날짜 / 선택목록 / 여러줄입력의 모양을 한 번에 지정 */
     .등록폼 input,
     .등록폼 select,
@@ -322,9 +342,9 @@
       <h2>요청 등록</h2>
 
       <div class="입력줄">
-        <label for="요청자">요청자 이름</label>
-        <!-- required : 비워두면 등록되지 않고 브라우저가 안내를 띄웁니다 -->
-        <input type="text" id="요청자" placeholder="예) 김서연" required>
+        <label for="요청자">요청자 이름 <span class="필수표시">*</span></label>
+        <input type="text" id="요청자" placeholder="예) 김서연">
+        <p class="오류문구" id="요청자오류"></p>
       </div>
 
       <div class="입력줄">
@@ -339,8 +359,9 @@
       </div>
 
       <div class="입력줄">
-        <label for="제목">제목</label>
-        <input type="text" id="제목" placeholder="예) 3분기 매출 데이터 요청" required>
+        <label for="제목">제목 <span class="필수표시">*</span></label>
+        <input type="text" id="제목" placeholder="예) 3분기 매출 데이터 요청">
+        <p class="오류문구" id="제목오류"></p>
       </div>
 
       <div class="입력줄">
@@ -360,8 +381,9 @@
       </div>
 
       <div class="입력줄">
-        <label for="상세내용">상세 내용</label>
-        <textarea id="상세내용" placeholder="어떤 도움이 필요한지 적어주세요." required></textarea>
+        <label for="상세내용">상세 내용 <span class="필수표시">*</span></label>
+        <textarea id="상세내용" placeholder="어떤 도움이 필요한지 적어주세요."></textarea>
+        <p class="오류문구" id="상세내용오류"></p>
       </div>
 
       <button type="submit" class="등록버튼">등록하기</button>
@@ -581,32 +603,99 @@ function 화면그리기() {
 
 
 /* ---------------------------------------------------------------------
-   [4] 등록하기 - '등록하기' 버튼을 눌렀을 때 실행됩니다
+   [4] 입력 검증 도우미 함수들
+   --------------------------------------------------------------------- */
+
+/* 검증해야 할 입력칸 3개를 미리 꺼내둡니다. */
+const 요청자입력 = document.getElementById("요청자");
+const 제목입력 = document.getElementById("제목");
+const 상세내용입력 = document.getElementById("상세내용");
+
+/* 입력칸에 오류 표시를 켭니다: 테두리를 빨갛게, 안내 문구를 보이게 합니다. */
+function 오류표시(입력요소, 메시지) {
+  const 입력줄 = 입력요소.closest(".입력줄");
+  입력줄.classList.add("입력오류");
+  const 오류칸 = 입력줄.querySelector(".오류문구");
+  if (오류칸) 오류칸.textContent = 메시지;
+}
+
+/* 입력칸의 오류 표시를 끕니다. */
+function 오류지우기(입력요소) {
+  const 입력줄 = 입력요소.closest(".입력줄");
+  입력줄.classList.remove("입력오류");
+  const 오류칸 = 입력줄.querySelector(".오류문구");
+  if (오류칸) 오류칸.textContent = "";
+}
+
+/* 다시 입력을 시작하면 그 칸의 빨간 표시를 바로 지웁니다. */
+[요청자입력, 제목입력, 상세내용입력].forEach(function (요소) {
+  요소.addEventListener("input", function () { 오류지우기(요소); });
+});
+
+
+/* ---------------------------------------------------------------------
+   [5] 등록하기 - '등록하기' 버튼을 눌렀을 때 실행됩니다
    --------------------------------------------------------------------- */
 document.getElementById("등록폼").addEventListener("submit", function (이벤트) {
   // 폼은 원래 누르면 페이지를 새로고침합니다. 그걸 막습니다.
   이벤트.preventDefault();
 
-  // (1) 입력칸에 적힌 값을 하나씩 꺼내서 새 요청 하나를 만듭니다.
+  // (1) 입력칸에 적힌 값을 꺼내면서 앞뒤 공백을 잘라냅니다.
+  const 요청자값 = 요청자입력.value.trim();
+  const 제목값 = 제목입력.value.trim();
+  const 상세내용값 = 상세내용입력.value.trim();
+
+  // (2) 검사하기 전에 이전 오류 표시를 모두 지웁니다.
+  [요청자입력, 제목입력, 상세내용입력].forEach(오류지우기);
+
+  // (3) 필수 항목이 비어 있는지, 상세 내용이 10자 이상인지 확인합니다.
+  //     문제가 있는 첫 번째 칸을 기억해두었다가 나중에 그 칸으로 커서를 옮깁니다.
+  let 첫오류칸 = null;
+
+  if (!요청자값) {
+    오류표시(요청자입력, "요청자를 입력해 주세요.");
+    첫오류칸 = 첫오류칸 || 요청자입력;
+  }
+
+  if (!제목값) {
+    오류표시(제목입력, "제목을 입력해 주세요.");
+    첫오류칸 = 첫오류칸 || 제목입력;
+  }
+
+  if (!상세내용값) {
+    오류표시(상세내용입력, "상세 내용을 입력해 주세요.");
+    첫오류칸 = 첫오류칸 || 상세내용입력;
+  } else if (상세내용값.length < 10) {
+    오류표시(상세내용입력, "상세 내용을 10자 이상 입력해 주세요.");
+    첫오류칸 = 첫오류칸 || 상세내용입력;
+  }
+
+  // (4) 문제가 있으면 등록하지 않고, 그 칸으로 커서를 옮긴 뒤 끝냅니다.
+  if (첫오류칸) {
+    첫오류칸.focus();
+    return;
+  }
+
+  // (5) 새 요청 하나를 만듭니다.
   const 새요청 = {
     번호: 다음번호,
-    요청자: document.getElementById("요청자").value.trim(),   // trim() : 앞뒤 공백 제거
+    요청자: 요청자값,
     유형: document.getElementById("유형").value,
     접수일시: 지금시각(),                                     // 접수 일시는 자동으로!
-    제목: document.getElementById("제목").value.trim(),
+    제목: 제목값,
     희망완료일: document.getElementById("희망완료일").value,
     긴급도: document.getElementById("긴급도").value,
-    상세내용: document.getElementById("상세내용").value.trim()
+    상세내용: 상세내용값
   };
 
-  // (2) 상자에 새 요청을 넣고, 다음에 쓸 번호를 1 올립니다.
+  // (6) 상자에 새 요청을 넣고, 다음에 쓸 번호를 1 올립니다.
   요청목록.push(새요청);
   다음번호 = 다음번호 + 1;
 
-  // (3) 폼을 비워서 바로 다음 요청을 쓸 수 있게 합니다.
+  // (7) 폼을 비워서 바로 다음 요청을 쓸 수 있게 합니다.
   this.reset();
 
-  // (4) 내용이 바뀌었으니 화면을 다시 그립니다.
+  // (8) 내용이 바뀌었으니 화면을 다시 그립니다.
   화면그리기();
 });
 
